@@ -42,6 +42,7 @@ func main() {
 	}
 
 	totalIssues := 0
+	totalErrors := 0
 	fixedIssues := 0
 
 	for i := range files {
@@ -53,6 +54,9 @@ func main() {
 			for _, issue := range issues {
 				if issue.Fixable {
 					fixedIssues++
+				}
+				if issue.Severity == model.SeverityError {
+					totalErrors++
 				}
 			}
 		}
@@ -92,7 +96,7 @@ func main() {
 		}
 	}
 
-	if *strictFlag && totalIssues > 0 {
+	if *strictFlag && totalErrors > 0 {
 		os.Exit(1)
 	}
 }

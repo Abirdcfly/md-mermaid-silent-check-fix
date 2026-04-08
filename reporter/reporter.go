@@ -20,10 +20,11 @@ type FileReport struct {
 }
 
 type IssueReport struct {
-	Type    string `json:"type"`
-	Message string `json:"message"`
-	Line    int    `json:"line"`
-	Fixable bool   `json:"fixable"`
+	Type     string `json:"type"`
+	Message  string `json:"message"`
+	Line     int    `json:"line"`
+	Fixable  bool   `json:"fixable"`
+	Severity string `json:"severity"`
 }
 
 func PrintTextReport(files []model.MarkdownFile) int {
@@ -45,8 +46,8 @@ func PrintTextReport(files []model.MarkdownFile) int {
 				if issue.Fixable {
 					fixMarker = "✅"
 				}
-				fmt.Printf("[%s] %s (line %d)\n  %s\n  fixable: %v\n",
-					issue.Type, fixMarker, issue.Line, issue.Message, issue.Fixable)
+				fmt.Printf("[%s] [%s] %s (line %d)\n  %s\n  fixable: %v\n",
+					issue.Severity, issue.Type, fixMarker, issue.Line, issue.Message, issue.Fixable)
 			}
 		}
 	}
@@ -71,10 +72,11 @@ func PrintJSONReport(files []model.MarkdownFile) error {
 		for _, block := range file.Blocks {
 			for _, issue := range block.Issues {
 				fr.Issues = append(fr.Issues, IssueReport{
-					Type:    issue.Type,
-					Message: issue.Message,
-					Line:    issue.Line,
-					Fixable: issue.Fixable,
+					Type:     issue.Type,
+					Message:  issue.Message,
+					Line:     issue.Line,
+					Fixable:  issue.Fixable,
+					Severity: issue.Severity,
 				})
 			}
 		}

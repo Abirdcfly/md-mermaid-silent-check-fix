@@ -9,13 +9,17 @@ import (
 )
 
 var (
-	nodeIDRegex   = regexp.MustCompile(`^\s*([A-Za-z0-9_]+)\s*\[`)
-	classDefRegex = regexp.MustCompile(`classDef\s+([A-Za-z0-9_]+)`)
-	classUseRegex = regexp.MustCompile(`class\s+([A-Za-z0-9_\s,]+)\s+([A-Za-z0-9_]+)`)
-	styleRegex    = regexp.MustCompile(`style\s+[A-Za-z0-9_]+\s+([a-z-]+):`)
-	subgraphRegex = regexp.MustCompile(`subgraph\s+([A-Za-z0-9_]+)`)
+	nodeIDRegex   = regexp.MustCompile(`^\s*([A-Za-z0-9_-]+)\s*\[`)
+	classDefRegex = regexp.MustCompile(`classDef\s+([A-Za-z0-9_-]+)`)
+	classUseRegex = regexp.MustCompile(`class\s+([A-Za-z0-9\s,_-]+)\s+([A-Za-z0-9_-]+)`)
+	styleRegex    = regexp.MustCompile(`style\s+[A-Za-z0-9_-]+\s+([a-z-]+):`)
+	subgraphRegex = regexp.MustCompile(`subgraph\s+([A-Za-z0-9_-]+)`)
 	nodeTextRegex = regexp.MustCompile(`\[([^\]]+)\]`)
 	htmlTagRegex  = regexp.MustCompile(`<(div|span|p|div\s|span\s|p\s)`)
+	// connectionRegex matches any arrow connection and extracts source/target nodes
+	// handles all arrow types: -->, ->, ==>, -.->, -.-, ~~~, etc.
+	// also handles labeled arrows with spaces in labels
+	connectionRegex = regexp.MustCompile(`([A-Za-z0-9_-]+)\s*.*[-=.][-=.]+[>]\s*.*\s+([A-Za-z0-9_-]+)`)
 
 	validStyleProps = map[string]bool{
 		"fill": true, "stroke": true, "stroke-width": true, "color": true,
@@ -45,11 +49,12 @@ func checkNewlineLiteral(issues []model.Issue, block model.MermaidBlock) []model
 	for i, line := range lines {
 		if strings.Contains(line, `\n`) {
 			issues = append(issues, model.Issue{
-				Type:    model.IssueTypeNewlineLiteral,
-				Message: "Found newline literal \\n in text, use <br> instead",
-				Line:    block.StartLine + i,
-				Fixable: true,
-				Fix:     fixer.FixNewline,
+				Type:     model.IssueTypeNewlineLiteral,
+				Message:  "Found newline literal \\n in text, use <br> instead",
+				Line:     block.StartLine + i,
+				Fixable:  true,
+				Fix:      fixer.FixNewline,
+				Severity: model.SeverityError,
 			})
 		}
 	}
@@ -61,10 +66,11 @@ func checkHTMLiteral(issues []model.Issue, block model.MermaidBlock) []model.Iss
 	for i, line := range lines {
 		if htmlTagRegex.MatchString(strings.ToLower(line)) {
 			issues = append(issues, model.Issue{
-				Type:    model.IssueTypeHTMLiteral,
-				Message: "Found HTML tag <div>/<span>, may not render correctly in Mermaid",
-				Line:    block.StartLine + i,
-				Fixable: false,
+				Type:     model.IssueTypeHTMLiteral,
+				Message:  "Found HTML tag <div>/<span>, may not render correctly in Mermaid",
+				Line:     block.StartLine + i,
+				Fixable:  false,
+				Severity: model.SeverityError,
 			})
 		}
 	}
@@ -81,10 +87,11 @@ func checkDuplicateNode(issues []model.Issue, block model.MermaidBlock) []model.
 			nodeID := matches[1]
 			if firstLine, exists := nodes[nodeID]; exists {
 				issues = append(issues, model.Issue{
-					Type:    model.IssueTypeDuplicateNode,
-					Message: "Node " + nodeID + " defined multiple times (first at line " + string(rune(firstLine)) + ")",
-					Line:    block.StartLine + i,
-					Fixable: false,
+					Type:     model.IssueTypeDuplicateNode,
+					Message:  "Node " + nodeID + " defined multiple times (first at line " + string(rune(firstLine)) + ")",
+					Line:     block.StartLine + i,
+					Fixable:  false,
+					Severity: model.SeverityError,
 				})
 			} else {
 				nodes[nodeID] = block.StartLine + i
@@ -111,10 +118,11 @@ func checkUndefinedClass(issues []model.Issue, block model.MermaidBlock) []model
 			className := matches[2]
 			if !classDefs[className] {
 				issues = append(issues, model.Issue{
-					Type:    model.IssueTypeUndefinedClass,
-					Message: "Class " + className + " is used but not defined with classDef",
-					Line:    block.StartLine + i,
-					Fixable: false,
+					Type:     model.IssueTypeUndefinedClass,
+					Message:  "Class " + className + " is used but not defined with classDef",
+					Line:     block.StartLine + i,
+					Fixable:  false,
+					Severity: model.SeverityError,
 				})
 			}
 		}
@@ -131,10 +139,11 @@ func checkInvalidStyle(issues []model.Issue, block model.MermaidBlock) []model.I
 				prop := match[1]
 				if !validStyleProps[prop] {
 					issues = append(issues, model.Issue{
-						Type:    model.IssueTypeInvalidStyle,
-						Message: "Invalid style property '" + prop + "', may be a typo",
-						Line:    block.StartLine + i,
-						Fixable: false,
+						Type:     model.IssueTypeInvalidStyle,
+						Message:  "Invalid style property '" + prop + "', may be a typo",
+						Line:     block.StartLine + i,
+						Fixable:  false,
+						Severity: model.SeverityError,
 					})
 				}
 			}
@@ -153,15 +162,28 @@ func checkUnquotedText(issues []model.Issue, block model.MermaidBlock) []model.I
 				if strings.Contains(text, `"`) {
 					continue
 				}
-				if strings.Contains(text, "(") && strings.Contains(text, ")") ||
-					strings.Contains(text, ":") ||
-					strings.Contains(text, "{") && strings.Contains(text, "}") {
+				// Unwrap wrapping parentheses from node shape syntax
+				// Handles [(text)], ((text)), [[text]], etc. that come from different node shapes
+				for {
+					if len(text) >= 2 && (text[0] == '(' && text[len(text)-1] == ')') ||
+						(text[0] == '[' && text[len(text)-1] == ']') {
+						text = text[1 : len(text)-1]
+					} else {
+						break
+					}
+				}
+				// After unwrapping shape syntax, check if actual content contains special characters
+				// Only require quotes when there are matching parentheses or curly braces
+				// Colons in text content don't require quotes in modern Mermaid
+				if (strings.Contains(text, "(") && strings.Contains(text, ")")) ||
+					(strings.Contains(text, "{") && strings.Contains(text, "}")) {
 					issues = append(issues, model.Issue{
-						Type:    model.IssueTypeUnquotedText,
-						Message: "Text contains special characters () : {} and is not quoted",
-						Line:    block.StartLine + i,
-						Fixable: true,
-						Fix:     fixer.FixUnquotedText,
+						Type:     model.IssueTypeUnquotedText,
+						Message:  "Text contains special characters () : {} and is not quoted",
+						Line:     block.StartLine + i,
+						Fixable:  true,
+						Fix:      fixer.FixUnquotedText,
+						Severity: model.SeverityError,
 					})
 				}
 			}
@@ -181,19 +203,16 @@ func checkIsolatedNode(issues []model.Issue, block model.MermaidBlock) []model.I
 			nodes[matches[1]] = true
 		}
 
-		if strings.Contains(line, "-->") || strings.Contains(line, "->") || strings.Contains(line, "==>") {
-			parts := strings.Fields(line)
-			for _, part := range parts {
-				if strings.HasPrefix(part, "--") || strings.HasPrefix(part, "->") || strings.HasPrefix(part, "==") {
-					continue
+		// Find all connections in this line using regex
+		connMatches := connectionRegex.FindAllStringSubmatch(line, -1)
+		for _, match := range connMatches {
+			if len(match) > 2 {
+				// Both source and target nodes are connected
+				if len(strings.TrimSpace(match[1])) > 0 {
+					connectedNodes[match[1]] = true
 				}
-				if strings.HasSuffix(part, "--") || strings.HasSuffix(part, "->") || strings.HasSuffix(part, "==") {
-					continue
-				}
-				nodeID := strings.TrimLeft(part, "-")
-				nodeID = strings.TrimRight(nodeID, "-=")
-				if len(nodeID) > 0 {
-					connectedNodes[nodeID] = true
+				if len(strings.TrimSpace(match[2])) > 0 {
+					connectedNodes[match[2]] = true
 				}
 			}
 		}
@@ -209,10 +228,11 @@ func checkIsolatedNode(issues []model.Issue, block model.MermaidBlock) []model.I
 				}
 			}
 			issues = append(issues, model.Issue{
-				Type:    model.IssueTypeIsolatedNode,
-				Message: "Node " + node + " is isolated (no connections)",
-				Line:    line,
-				Fixable: false,
+				Type:     model.IssueTypeIsolatedNode,
+				Message:  "Node " + node + " is isolated (no connections)",
+				Line:     line,
+				Fixable:  false,
+				Severity: model.SeverityWarning,
 			})
 		}
 	}
@@ -230,10 +250,11 @@ func checkDuplicateSubgraph(issues []model.Issue, block model.MermaidBlock) []mo
 			name := matches[1]
 			if firstLine, exists := subgraphs[name]; exists {
 				issues = append(issues, model.Issue{
-					Type:    model.IssueTypeDuplicateSubgraph,
-					Message: "Subgraph " + name + " defined multiple times (first at line " + string(rune(firstLine)) + ")",
-					Line:    block.StartLine + i,
-					Fixable: false,
+					Type:     model.IssueTypeDuplicateSubgraph,
+					Message:  "Subgraph " + name + " defined multiple times (first at line " + string(rune(firstLine)) + ")",
+					Line:     block.StartLine + i,
+					Fixable:  false,
+					Severity: model.SeverityError,
 				})
 			} else {
 				subgraphs[name] = block.StartLine + i

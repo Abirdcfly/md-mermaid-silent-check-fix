@@ -38,7 +38,7 @@ func ApplyFixes(content string, block model.MermaidBlock) string {
 	inBlock := false
 	for i, line := range lines {
 		lineNum := i + 1
-		if lineNum == block.StartLine-1 {
+		if lineNum == block.StartLine {
 			inBlock = true
 			newLines = append(newLines, line)
 			fixedLines := strings.Split(fixedContent, "\n")
@@ -47,6 +47,8 @@ func ApplyFixes(content string, block model.MermaidBlock) string {
 		}
 		if lineNum == block.EndLine {
 			inBlock = false
+			newLines = append(newLines, line)
+			continue
 		}
 		if !inBlock {
 			newLines = append(newLines, line)

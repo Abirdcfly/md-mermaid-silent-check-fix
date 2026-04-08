@@ -14,20 +14,24 @@ type MermaidBlock struct {
 }
 
 type Issue struct {
-	Type    string
-	Message string
-	Line    int
-	Fixable bool
-	Fix     func(string) string
+	Type     string
+	Message  string
+	Line     int
+	Fixable  bool
+	Fix      func(string) string
+	Severity string
 }
 
 const (
-	IssueTypeNewlineLiteral   = "newline_literal"
-	IssueTypeHTMLiteral       = "html_literal"
-	IssueTypeDuplicateNode    = "duplicate_node"
-	IssueTypeUndefinedClass   = "undefined_class"
-	IssueTypeInvalidStyle     = "invalid_style"
-	IssueTypeUnquotedText     = "unquoted_text"
-	IssueTypeIsolatedNode     = "isolated_node"
+	SeverityError   = "error"
+	SeverityWarning = "warning"
+
+	IssueTypeNewlineLiteral    = "newline_literal"
+	IssueTypeHTMLiteral        = "html_literal"
+	IssueTypeDuplicateNode     = "duplicate_node"
+	IssueTypeUndefinedClass    = "undefined_class"
+	IssueTypeInvalidStyle      = "invalid_style"
+	IssueTypeUnquotedText      = "unquoted_text"
+	IssueTypeIsolatedNode      = "isolated_node"
 	IssueTypeDuplicateSubgraph = "duplicate_subgraph"
 )
