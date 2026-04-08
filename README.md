@@ -1,5 +1,8 @@
 # mermaid-lint
 
+> [!WARNING]
+> **Archived**: Because [mermaid-js/mermaid#7276](https://github.com/mermaid-js/mermaid/pull/7276) has been merged, `\n` is now natively supported in Mermaid diagrams and there is no need to convert `\n` to `<br>` anymore. The reason why many websites still display `\n` incorrectly is simply because they haven't updated their Mermaid version.
+
 A Go static analysis tool for checking and fixing common issues in Mermaid diagrams embedded in Markdown files.
 
 ## Features

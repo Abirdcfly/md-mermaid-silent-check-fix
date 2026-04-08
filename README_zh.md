@@ -1,5 +1,8 @@
 # mermaid-lint
 
+> [!WARNING]
+> **已归档**: 因为 [mermaid-js/mermaid#7276](https://github.com/mermaid-js/mermaid/pull/7276) 已经合并，Mermaid 现在原生支持 `\n` 换行，不再需要将 `\n` 转换为 `<br>` 了。现在之所以还有很多网站显示 `\n` 错误而不是正确回车，纯粹是因为他们没有更新 Mermaid 版本。
+
 一个用于检查和修复 Markdown 文件中 Mermaid 图表常见问题的 Go 静态分析工具。
 
 ## 功能特性
